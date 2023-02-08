@@ -1,0 +1,74 @@
+Carreggando arquivo de log de servidores no Databricks:
+------------------------------------------------------
+
+- Carreguei um arquivo de log .txt no databricks. 
+- Criei um dataframe e carreguei os dados no dataframe.
+- Apliquei transformação com expressões regulares.
+- Criei uma tabela.
+- Carreguei os dados na tabela.
+
+
+
+-- listando o arquivo no DBFS
+
+%fs ls /FileStore/tables/apache_logs.txt
+
+
+
+-- criando o dataframe e carregando os dados no dataframe
+
+file_df = spark.read \
+               .format("text") \
+               .load("/FileStore/tables/apache_logs.txt")
+
+file_df.printSchema()
+display(file_df)
+
+
+
+
+-- aplicando transformação com expressões regulares
+
+from pyspark.sql.functions import regexp_extract
+
+log_reg = r'^(\S+) (\S+) (\S+) \[([\w:/]+\s[+\-]\d{4})\] "(\S+) (\S+) (\S+)" (\d{3}) (\S+) "(\S+)" "([^"]*)'
+
+logs_df = file_df.select(regexp_extract('value', log_reg, 1).alias('ip'),
+                         regexp_extract('value', log_reg, 4).alias('date'),
+                         regexp_extract('value', log_reg, 6).alias('image'),
+                         regexp_extract('value', log_reg, 10).alias('referrer'))
+
+logs_df.printSchema()
+
+
+
+
+-- criando o database e a tabela
+
+%sql
+create database if not exists demo_db
+
+%sql
+create table if not exists demo_db.log_tables(
+  ip string,
+  date string,
+  image string,
+  referrer string) using parquet
+  
+  
+  
+  
+  -- carregando os dados na tabela
+  
+  logs_df.write \
+            .format("parquet") \
+            .mode("overwrite") \
+            .saveAsTable("log_tables")
+            
+            
+            
+            
+-- fazendo o select na tabela que os dados foram carregados
+
+%sql
+select ip, date, image, referrer from log_tables
